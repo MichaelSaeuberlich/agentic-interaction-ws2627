@@ -41,6 +41,35 @@ def _execute_tool(cfg: Config, name: str, args: dict) -> dict:
         return get_calendar_day(cfg.data_base_url, args.get("date"))
     return {"error": f"unknown tool: {name}"}
 
+MAX_MODEL_RETRIES = 3
+
+def _is_retryable(exc: Exception) -> bool:
+    if isinstance(exc, (OpenAI.RateLimitError, OpenAI.APITimeoutError, OpenAI.APIConnectionError)):
+        return True
+    if isinstance(exc, OpenAI.BadRequestError):
+        text = str(exc)
+        return "tool_use_failed" in text or "Parsing failed" in text
+    return False
+
+
+def _call_model(client, cfg, messages, logger, step):
+    for attempt in range(1, MAX_MODEL_RETRIES + 1):
+        start = time.perf_counter()
+        try:
+            return client.chat.completions.create(
+                model=cfg.model, messages=messages,
+                tools=TOOLS, tool_choice="auto",
+            )
+        except Exception as exc:
+            retryable = _is_retryable(exc)
+            logger.log(
+                "error", ok=False, duration_ms=_elapsed_ms(start),
+                step=step, attempt=attempt, retryable=retryable,
+                error=f"{type(exc).__name__}: {str(exc)[:500]}",
+            )
+            if not retryable or attempt == MAX_MODEL_RETRIES:
+                raise
+            time.sleep(2 * attempt)  # 2 s, 4 s, ...
 
 def run_agent(cfg: Config, logger: RunLogger, task: str) -> str:
     client = OpenAI(base_url=cfg.base_url, api_key=cfg.api_key)
@@ -51,12 +80,15 @@ def run_agent(cfg: Config, logger: RunLogger, task: str) -> str:
 
     for step in range(1, MAX_ROUNDS+1):
         start = time.perf_counter()
-        response = client.chat.completions.create(
-            model=cfg.model,
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="auto",
-        )
+        # response = client.chat.completions.create(
+        #    model=cfg.model,
+        #    messages=messages,
+        #    tools=TOOLS,
+        #    tool_choice="auto",
+        #)
+
+        response = _call_model(client, cfg, messages, logger, step)
+
         model_ms = _elapsed_ms(start)
         message = response.choices[0].message
 
