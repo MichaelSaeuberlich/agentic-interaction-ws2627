@@ -48,7 +48,7 @@ def run_agent(cfg: Config, logger: RunLogger, task: str) -> str:
         {"role": "user", "content": task},
     ]
 
-    for _ in range(MAX_ROUNDS):
+    for step in range(1, MAX_ROUNDS+1):
         start = time.perf_counter()
         response = client.chat.completions.create(
             model=cfg.model,
@@ -88,7 +88,7 @@ def run_agent(cfg: Config, logger: RunLogger, task: str) -> str:
             name = call.function.name
             args = _parse_arguments(call.function.arguments)
             # duration_ms here is the model call that produced this request.
-            logger.log("tool_call", tool=name, args=args, duration_ms=model_ms)
+            logger.log("tool_call", tool=name, args=args, duration_ms=model_ms, step=step)
 
             tool_start = time.perf_counter()
             result = _execute_tool(cfg, name, args)
