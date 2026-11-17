@@ -10,8 +10,8 @@ from agent.tools import TOOLS, get_calendar_day
 
 SYSTEM_PROMPT = (
     "You are a calendar assistant. To answer questions about appointments, "
-    "call the calendar tool for each requested date. Never invent appointments, "
-    "times or locations. "
+    "call the calendar tool for each requested date. Multiple calls at once are possible. "
+    "Never invent appointments, times or locations. "
     "If the tool reports found=false (no data for this day), say that the calendar "
     "has no data for that day; do not claim there are no appointments. "
     "If the tool returns an empty list of events, say there are no appointments that day. "
@@ -19,7 +19,7 @@ SYSTEM_PROMPT = (
 )
 
 # Safety limit: normally one tool round is enough (model -> tool -> model).
-MAX_ROUNDS = 5
+MAX_ROUNDS = 10
 
 
 def _elapsed_ms(start: float) -> int:
