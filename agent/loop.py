@@ -10,7 +10,8 @@ from agent.tools import TOOLS, get_calendar_day
 
 SYSTEM_PROMPT = (
     "You are a calendar assistant. To answer questions about appointments, "
-    "call the calendar tool for each requested date. Multiple calls at once are possible. "
+    "call the calendar tool for each requested date. If multiple dates are requested, "
+    "you can call the tool multiple times at once. "
     "Never invent appointments, times or locations. "
     "If the tool reports found=false (no data for this day), say that the calendar "
     "has no data for that day; do not claim there are no appointments. "
