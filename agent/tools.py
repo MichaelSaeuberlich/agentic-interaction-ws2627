@@ -34,30 +34,36 @@ TOOLS = [
     }
 ]
 
-
-def get_calendar_day(data_base_url: str, date: str) -> dict:
-    """Fetch the appointments of one day. Always returns a dict and never raises."""
+# helper function
+def _valid_date(date) -> bool:
     # Strict check: fromisoformat alone also accepts forms like 20261029.
     try:
-        parsed = datetime.date.fromisoformat(date)
+        return datetime.date.fromisoformat(date).isoformat() == date
     except (TypeError, ValueError):
-        return {"date": date, "error": "invalid date, expected format YYYY-MM-DD"}
-    if parsed.isoformat() != date:
-        return {"date": date, "error": "invalid date, expected format YYYY-MM-DD"}
+        return False
 
-    url = f"{data_base_url}/calendar/{date}.json"
+
+def _fetch_json(url: str, meta: dict) -> dict:
+    """GET a JSON file. Always returns a dict, never raises. 404 = no data."""
     try:
         response = requests.get(url, timeout=TIMEOUT_SECONDS)
     except requests.RequestException as exc:
-        return {"date": date, "error": f"request failed: {exc}"}
-
-    # 404 means "no data for this day": a normal result, not an error.
+        return {**meta, "error": f"request failed: {exc}"}
     if response.status_code == 404:
-        return {"date": date, "found": False, "message": "No data for this day"}
+        return {**meta, "found": False,
+                "message": "No data for this request. Do not estimate or guess values."}
     if response.status_code != 200:
-        return {"date": date, "error": f"unexpected HTTP status {response.status_code}"}
-
+        return {**meta, "error": f"unexpected HTTP status {response.status_code}"}
     try:
         return response.json()
     except ValueError:
-        return {"date": date, "error": "response is not valid JSON"}
+        return {**meta, "error": "response is not valid JSON"}
+
+# tool call functions
+def get_calendar_day(data_base_url: str, date: str) -> dict:
+    """Fetch the appointments of one day. Always returns a dict and never raises."""
+    meta = {"date": date}
+    if not _valid_date(date):
+        return {**meta, "error": "invalid date, expected format YYYY-MM-DD"}
+    url = f"{data_base_url}/calendar/{date}.json"
+    return _fetch_json(url, meta)
