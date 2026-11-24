@@ -6,21 +6,31 @@ from openai import OpenAI
 
 from agent.config import Config
 from agent.logger import RunLogger
-from agent.tools import TOOLS, get_calendar_day
+from agent.tools import TOOLS, get_calendar_day, get_weather, get_train_connections, get_context
 
 SYSTEM_PROMPT = (
-    "You are a calendar assistant. To answer questions about appointments, "
-    "call the calendar tool for each requested date. If multiple dates are requested, "
-    "you can call the tool multiple times at once. "
-    "Never invent appointments, times or locations. "
-    "If the tool reports found=false (no data for this day), say that the calendar "
-    "has no data for that day; do not claim there are no appointments. "
-    "If the tool returns an empty list of events, say there are no appointments that day. "
-    "Answer in the language of the user's question, as plain text without Markdown."
+    "You are an assistant for calendar, weather and train connections. Get every fact from the "
+    "tools; never use your own knowledge for appointments, weather, trains, times or prices. "
+    "If a tool returns found=false, there is no data for exactly that request (day, place or "
+    "route): say so for that part and do not estimate or guess. If a tool returns an error, "
+    "say that the lookup failed technically. If you can only answer part of a question, answer "
+    "that part and say what is missing. If the user names no starting point, use the home city "
+    "from get_context. For a trip on the current day, ignore connections that have already "
+    "departed (compare with now from get_context). State rain probability as a percentage and "
+    "give a short recommendation. If the calendar returns an empty list of events, say there "
+    "are no appointments that day. Answer in the language of the question, as plain text "
+    "without Markdown."
 )
 
 # Safety limit: normally one tool round is enough (model -> tool -> model).
 MAX_ROUNDS = 10
+
+HANDLERS = {
+    "get_calendar_day": get_calendar_day,
+    "get_weather": get_weather,
+    "get_train_connections": get_train_connections,
+    "get_context": get_context,
+}
 
 
 def _elapsed_ms(start: float) -> int:
@@ -37,9 +47,13 @@ def _parse_arguments(raw: str) -> dict:
 
 
 def _execute_tool(cfg: Config, name: str, args: dict) -> dict:
-    if name == "get_calendar_day":
-        return get_calendar_day(cfg.data_base_url, args.get("date"))
-    return {"error": f"unknown tool: {name}"}
+    handler = HANDLERS.get(name)
+    if handler is None:
+        return {"error": f"unknown tool: {name}"}
+    try:
+        return handler(cfg.data_base_url, **args)
+    except TypeError as exc:  # model sent missing or unexpected arguments
+        return {"error": f"invalid arguments: {exc}"}
 
 MAX_MODEL_RETRIES = 3
 
